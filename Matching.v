@@ -132,6 +132,7 @@ Inductive evalo : Value -> S -> nat -> Prop :=
                    (EH : cstOf w <> p)
                    (H  : evalo v (Switch m ps oth) i), evalo v (Switch m ((p, s') :: ps) oth) i.
 
+(* The determinism of the switch language semantics *)
 Lemma evaloDeterministic (v : Value) (s : S) (i : nat) (H : evalo v s i) :
   forall j,  evalo v s j -> j = i.
 Proof.
@@ -144,6 +145,7 @@ Qed.
 Definition CorrectAndCompleteImplementation (ps : list Pattern) (s : S) : Prop :=
   forall (v : Value) (i : nat), matcho v ps = i <-> evalo v s i.
 
+(* Elimination of universal quantifier over the set of answers *)
 Lemma answerQantifierElimination (ps : list Pattern) (s : S) :
   (forall (v : Value), exists (i : nat),  matcho v ps = i /\ evalo v s i) -> CorrectAndCompleteImplementation ps s.
 Proof.

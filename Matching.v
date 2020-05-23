@@ -26,6 +26,14 @@ Definition cstOf (v : Value) : name :=
   | B cst _ _ => cst
   end.
 
+(* Get the height of a value *)
+Fixpoint height (v : Value) : nat :=
+  match v with
+    L _     => 1
+  | U _ s   => 1 + height s
+  | B _ l r => 1 + Nat.max (height l) (height r)
+  end.
+
 (* Patterns *)
 Inductive Pattern : Set :=
   pW : Pattern 
@@ -33,7 +41,22 @@ Inductive Pattern : Set :=
 | pU : forall (cst : name) (s   : Pattern), Pattern
 | pB : forall (cst : name) (l r : Pattern), Pattern.
 
+(* Gets the depth of a pattern *)
+Fixpoint depth (v : Pattern) : nat :=
+  match v with
+    pW       => 1
+  | pL _     => 1
+  | pU _ s   => 1 + depth s
+  | pB _ l r => 1 + Nat.max (depth l) (depth r)
+  end.
+
 (* Declarative semantics for pattern matching *)
+
+(* An ordered sequence of patterns *)
+Definition Patterns := list Pattern.
+
+(* The depth of patterns *)
+Definition Depth (ps : Patterns) : nat := fold_left (fun d p => Nat.max d (depth p)) ps 0.
 
 (* Matching against a single pattern *)
 Fixpoint matchValue (v : Value) (p : Pattern) : bool :=
@@ -58,18 +81,18 @@ Inductive matchValue : Value -> Pattern -> Prop :=
  *)
 
 (* Matching against multiple patterns *)
-Fixpoint matchoInner (i : nat) (v : Value) (ps : list Pattern) : nat :=
+Fixpoint matchoInner (i : nat) (v : Value) (ps : Patterns) : nat :=
   match ps with
     []       => i
   | p :: ps' => if matchValue v p then i else matchoInner (i+1) v ps'
   end.
 
-Definition matcho (v : Value) (ps : list Pattern) : nat :=
+Definition matcho (v : Value) (ps : Patterns) : nat :=
   matchoInner 0 v ps.
 
 (* Note: the functionality of matcho comes for free! *)
 
-Lemma indexBound_gen (v : Value) (ps : list Pattern) (i j : nat) (H : matchoInner i v ps = j) : j <= i + 1 + length ps.
+Lemma indexBound_gen (v : Value) (ps : Patterns) (i j : nat) (H : matchoInner i v ps = j) : j <= i + 1 + length ps.
 Proof.
   generalize dependent i.
   induction ps; intros i H; unfold matchoInner in H.
@@ -80,7 +103,7 @@ Proof.
 Qed.
 
 (* Proves that the index of the result in declarative semantics is bounded by 0..length ps + 1*)
-Lemma indexBound (v : Value) (ps : list Pattern) (i : nat) (H : matcho v ps = i) : i <= 1 + length ps.
+Lemma indexBound (v : Value) (ps : Patterns) (i : nat) (H : matcho v ps = i) : i <= 1 + length ps.
 Proof. unfold matcho in H. apply indexBound_gen in H. auto. Qed.
 
 (* The switch language *)
@@ -92,6 +115,15 @@ Inductive M : Set :=
 | subL : forall (m : M), M
 | subR : forall (m : M), M.
 
+(* The depth of a ,atching expression *)
+Fixpoint mDepth (m : M) : nat :=
+  match m with
+    scr    => 1
+  | sub  m => 1 + mDepth m
+  | subL m => 1 + mDepth m
+  | subR m => 1 + mDepth m
+  end.
+  
 (* The semantics of matching expression *)
 Inductive Mof : Value -> M -> Value -> Prop :=
   Mscr  : forall              (v      : Value)                                   , Mof v scr      v
@@ -114,6 +146,17 @@ Qed.
 Inductive S : Set :=
   Switch : forall (m : M) (bs : list (name * S)) (o : S), S
 | Return : forall (i : nat), S.
+
+(* The depth of a switch program *)
+Fixpoint sDepth (s : S) : nat :=
+  match s with
+    Return _        => 0
+  | Switch m br oth => fold_left (fun d p =>
+                                    match p with
+                                      (_, s) => Nat.max d (sDepth s)
+                                    end
+                                 ) br (Nat.max (mDepth m) (sDepth oth))
+  end.
 
 (* The semantics of the switch language *)
 Inductive evalo : Value -> S -> nat -> Prop :=
@@ -142,11 +185,11 @@ Proof.
 Qed.
 
 (* The definition of a correct and complete pattern matching implementation *)
-Definition CorrectAndCompleteImplementation (ps : list Pattern) (s : S) : Prop :=
+Definition CorrectAndCompleteImplementation (ps : Patterns) (s : S) : Prop :=
   forall (v : Value) (i : nat), matcho v ps = i <-> evalo v s i.
 
 (* Elimination of universal quantifier over the set of answers *)
-Lemma answerQantifierElimination (ps : list Pattern) (s : S) :
+Lemma answerQantifierElimination (ps : Patterns) (s : S) :
   (forall (v : Value), exists (i : nat),  matcho v ps = i /\ evalo v s i) -> CorrectAndCompleteImplementation ps s.
 Proof.
   intro H.
@@ -156,7 +199,11 @@ Proof.
   * rewrite H' in H. subst x. auto.
   * apply (evaloDeterministic v s i H' x) in H1. subst i. auto.
 Qed.
+
+(*
+Fixpoint DefaultImplementation (ps : Patterns) : S :=
  
-  
-  
+
+Lemma CCIexists (ps : Patterns) : exists (s : S), CorrectAndCompleteImplementation ps s /\ sDepth s <= Depth ps.
+  *)
 

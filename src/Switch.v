@@ -72,11 +72,11 @@ Inductive eval : Value -> S -> nat -> Prop :=
                    (H : eval v oth i), v |- Switch m [] oth ==> i
 | eHead   : forall (v w : Value) (i : nat) (m : M) (p : name) (ps : list (name * S)) (oth s' : S) 
                    (MH  : v |- m => w)
-                   (EH  : cstOf w = p)
+                   (EH  : cst_of w = p)
                    (H   : v |- s' ==> i), v |- Switch m ((p, s') :: ps) oth ==> i
 | eTail   : forall (v w : Value) (i : nat) (m : M) (p : name) (ps : list (name * S)) (oth s' : S) 
                    (MH  : v |- m =>  w)
-                   (EH  : cstOf w <> p)
+                   (EH  : cst_of w <> p)
                    (H   : v |- Switch m ps oth ==> i), v |- Switch m ((p, s') :: ps) oth ==> i
 where "v |- s ==> i" := (eval v s i).
 

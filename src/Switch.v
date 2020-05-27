@@ -52,6 +52,8 @@ Inductive S : Set :=
   Switch : forall (m : M) (bs : list (name * S)) (o : S), S
 | Return : forall (i : nat), S.
 
+Definition branches := list (name * S).
+
 (* The depth of a switch program *)
 Fixpoint depth_s (s : S) : nat :=
   match s with
@@ -70,11 +72,11 @@ Inductive eval : Value -> S -> nat -> Prop :=
   eReturn : forall (v : Value) (i : nat), v |- Return i ==> i
 | eOther  : forall (v : Value) (i : nat) (oth : S) (m : M)
                    (H : eval v oth i), v |- Switch m [] oth ==> i
-| eHead   : forall (v w : Value) (i : nat) (m : M) (p : name) (ps : list (name * S)) (oth s' : S) 
+| eHead   : forall (v w : Value) (i : nat) (m : M) (p : name) (ps : branches) (oth s' : S) 
                    (MH  : v |- m => w)
                    (EH  : cst_of w = p)
                    (H   : v |- s' ==> i), v |- Switch m ((p, s') :: ps) oth ==> i
-| eTail   : forall (v w : Value) (i : nat) (m : M) (p : name) (ps : list (name * S)) (oth s' : S) 
+| eTail   : forall (v w : Value) (i : nat) (m : M) (p : name) (ps : branches) (oth s' : S) 
                    (MH  : v |- m =>  w)
                    (EH  : cst_of w <> p)
                    (H   : v |- Switch m ps oth ==> i), v |- Switch m ((p, s') :: ps) oth ==> i
@@ -111,7 +113,7 @@ Proof.
 Qed.
 
 (* A supplementary property of equivalence on branches *)
-Inductive s_equiv_branches : list (name * S) -> list (name * S) -> Prop :=
+Inductive s_equiv_branches : branches -> branches -> Prop :=
   seb_Nil  : s_equiv_branches [] []
 | seb_Cons : forall (cst     : name)
                     (b1  b2  : S)
@@ -124,7 +126,7 @@ Inductive s_equiv_branches : list (name * S) -> list (name * S) -> Prop :=
 Lemma s_equiv_congruence
       (m       : M)
       (o1  o2  : S)
-      (bs1 bs2 : list (name * S))
+      (bs1 bs2 : branches)
       (Eqo     : o1 ~~ o2)
       (Eqbs    : s_equiv_branches bs1 bs2) : Switch m bs1 o1 ~~ Switch m bs2 o2.
 Proof.
@@ -140,5 +142,25 @@ Proof.
     + eapply eTail; eauto. specialize (IHbs1 bs3 Eqbs0 v i). inversion IHbs1. auto.
 Qed.
 
+(* A property of branches being sorted by constructors *)
+Inductive sorted_branches : branches -> Prop :=
+  sbNil  : sorted_branches []
+| sbUni  : forall (cst : name)
+                  (s : S), sorted_branches [(cst, s)]
+| sbTail : forall (cst cst' : name)
+                  (s s'     : S)
+                  (bs       : branches)
+                  (Hsb      : sorted_branches ((cst', s') :: bs))
+                  (Hord     : cst < cst'), sorted_branches ((cst, s) :: (cst', s') :: bs).
 
-    
+(* A property of programs to have sorted branches *)
+Inductive sorted : S -> Prop :=
+  nReturn  : forall (i    : nat), sorted (Return i)
+| nSwitch  : forall (m    : M)
+                    (o    : S)
+                    (bs   : branches)
+                    (Hso  : sorted o)                                        
+                    (Hord : sorted_branches bs), sorted (Switch m bs o).
+
+Lemma sort_lemma (s : S) : exists s', s' ~~ s /\ sorted s'.
+Proof. admit. Admitted.

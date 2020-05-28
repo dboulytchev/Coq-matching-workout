@@ -220,6 +220,8 @@ Proof.
       - apply s_equiv_congruence. auto. constructor.
       - constructor. auto. constructor.
         + inversion_clear IHs. inversion_clear IHbs. inversion_clear H. inversion_clear H0.
-          destruct a eqn:Da. 
+          destruct a eqn:Da. inversion H. exists (Switch m (insert n s0 bs) s). split.
+          - admit.
+          - 
   * exists (Return i). split. apply s_equiv_refl. constructor.
 Admitted.

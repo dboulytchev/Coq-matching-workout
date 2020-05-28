@@ -145,13 +145,63 @@ Qed.
 (* A property of branches being sorted by constructors *)
 Inductive sorted_branches : branches -> Prop :=
   sbNil  : sorted_branches []
-| sbUni  : forall (cst : name)
-                  (s : S), sorted_branches [(cst, s)]
-| sbTail : forall (cst cst' : name)
-                  (s s'     : S)
-                  (bs       : branches)
-                  (Hsb      : sorted_branches ((cst', s') :: bs))
-                  (Hord     : cst < cst'), sorted_branches ((cst, s) :: (cst', s') :: bs).
+| sbCons : forall (cst  : name)
+                  (s    : S)
+                  (bs   : branches)
+                  (Hbs  : sorted_branches bs)
+                  (Hord : forall cst' s', In (cst', s') bs -> cst < cst'),
+    sorted_branches ((cst, s) :: bs).
+
+(* Inserting in a branch sort-preserving *)
+Fixpoint insert (cst : name) (s : S) (bs : branches) : branches :=
+  match bs with
+    []                => [(cst, s)]
+  | (cst', s') :: bs' =>
+    if cst <? cst'
+    then (cst, s) :: bs
+    else if cst =? cst'
+         then (cst, s) :: bs'
+         else (cst', s') :: insert cst s bs'
+  end.
+
+(* Helper lemma *)
+Lemma in_insert
+      (cst cst' : name)
+      (s s'     : S)
+      (bs       : branches)
+      (Hin      : In (cst', s') (insert cst s bs)) : (cst', s') = (cst, s) \/ In (cst', s') bs.
+Proof. admit. Admitted.
+
+(* Inserting preserves sorting *)
+Lemma insert_sorted (cst : name) (s : S) (bs : branches) (Hsort : sorted_branches bs) :
+  sorted_branches (insert cst s bs).
+Proof.
+  induction bs.
+  * simpl. econstructor. auto. intros cst' s' Hin. inversion Hin.
+  * inversion_clear Hsort. simpl. destruct (cst <? cst0) eqn:Dcst.
+    + constructor.
+      - constructor; auto.
+      - intros cst' s' HIn.
+        rewrite (Nat.ltb_antisym cst0 cst) in Dcst.
+        apply Bool.negb_true_iff in Dcst.
+        apply leb_complete_conv in Dcst.
+        inversion HIn.
+        { inversion H. subst cst'. assumption. }
+        { apply (Hord cst' s') in H. eapply Nat.lt_trans; eauto. }
+    + destruct (cst =? cst0) eqn:Deq.
+      - apply beq_nat_true in Deq. subst cst. constructor; auto.
+      - assert (A : cst0 < cst). 
+        { rewrite Nat.ltb_antisym in Dcst.
+          apply Bool.negb_false_iff in Dcst.
+          apply (leb_complete cst0 cst) in Dcst.
+          apply (beq_nat_false cst cst0) in Deq. omega. }
+        constructor.
+        { auto. }
+        { intros cst' s' Hin. apply in_insert in Hin. inversion_clear Hin.
+          { inversion H. assumption. }
+          { eapply Hord. eauto. }
+        }
+Qed.          
 
 (* A property of programs to have sorted branches *)
 Inductive sorted : S -> Prop :=
@@ -162,5 +212,14 @@ Inductive sorted : S -> Prop :=
                     (Hso  : sorted o)                                        
                     (Hord : sorted_branches bs), sorted (Switch m bs o).
 
-Lemma sort_lemma (s : S) : exists s', s' ~~ s /\ sorted s'.
-Proof. admit. Admitted.
+Lemma sorting_lemma (s : S) : exists s', s' ~~ s /\ sorted s'.
+Proof.
+  induction s.
+  * induction bs.
+    + inversion_clear IHs. inversion_clear H. exists (Switch m [] x). split.
+      - apply s_equiv_congruence. auto. constructor.
+      - constructor. auto. constructor.
+        + inversion_clear IHs. inversion_clear IHbs. inversion_clear H. inversion_clear H0.
+          destruct a eqn:Da. 
+  * exists (Return i). split. apply s_equiv_refl. constructor.
+Admitted.

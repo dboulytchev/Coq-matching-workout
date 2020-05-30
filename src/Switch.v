@@ -112,15 +112,33 @@ Proof.
   split; intro; specialize (H v i); specialize (H0 v i); inversion_clear H; inversion_clear H0; auto.
 Qed.
 
-(* A supplementary property of equivalence on branches *)
-Inductive s_equiv_branches : branches -> branches -> Prop :=
-  seb_Nil  : s_equiv_branches [] []
-| seb_Cons : forall (cst     : name)
-                    (b1  b2  : S)
-                    (bs1 bs2 : list (name * S))
-                    (Eqb     : b1 ~~ b2)
-                    (Eqbs    : s_equiv_branches bs1 bs2),
-    s_equiv_branches ((cst, b1) :: bs1) ((cst, b2) :: bs2).
+(* Rewriting of equivalent *)
+Lemma rewrite_other
+      (v    : Value)
+      (i    : nat)
+      (m    : M)
+      (bs   : branches)
+      (o o' : S)
+      (Heq  : o ~~ o') 
+      (Hev  : v |- Switch m bs o ==> i) : v |- Switch m bs o' ==> i.
+Proof.
+  induction bs; inversion Hev.
+  * constructor. specialize (Heq v i). inversion_clear Heq. auto.
+  * eapply eHead; eauto.
+  * eapply eTail; eauto.
+Qed.
+  
+Lemma rewrite_branches
+      (v      : Value)
+      (i      : nat)
+      (m      : M)
+      (bs bs' : branches)
+      (o      : S)
+      (Heq    : Switch m bs o ~~ Switch m bs' o) 
+      (Hev    : v |- Switch m bs o ==> i) : v |- Switch m bs' o ==> i.
+Proof.
+  specialize (Heq v i). inversion_clear Heq. auto.
+Qed.
 
 (* Equivalence is a congruence *)
 Lemma s_equiv_congruence
@@ -128,18 +146,17 @@ Lemma s_equiv_congruence
       (o1  o2  : S)
       (bs1 bs2 : branches)
       (Eqo     : o1 ~~ o2)
-      (Eqbs    : s_equiv_branches bs1 bs2) : Switch m bs1 o1 ~~ Switch m bs2 o2.
+      (Eqbs    : Switch m bs1 o1 ~~ Switch m bs2 o1) : Switch m bs1 o1 ~~ Switch m bs2 o2.
 Proof.
-  generalize dependent bs2.
-  induction bs1; intros bs2 Eqbs v i; split; intro H; inversion Eqbs.
-  * inversion_clear H. econstructor. specialize (Eqo v i). inversion_clear Eqo. auto.
-  * subst bs2. inversion_clear H. econstructor. specialize (Eqo v i). inversion_clear Eqo. auto.
-  * subst a. inversion H.
-    + eapply eHead; eauto. specialize (Eqb v i). inversion_clear Eqb. auto.
-    + eapply eTail; eauto. specialize (IHbs1 bs3 Eqbs0 v i). inversion IHbs1. auto.
-  * subst bs2. inversion_clear H.
-    + econstructor; eauto. specialize (Eqb v i). inversion_clear Eqb. auto.
-    + eapply eTail; eauto. specialize (IHbs1 bs3 Eqbs0 v i). inversion IHbs1. auto.
+  destruct bs1; intros v i; split; intro HL.
+    * eapply rewrite_other. eauto. eapply rewrite_branches; eauto.
+    * apply s_equiv_symm in Eqo. apply (rewrite_other v i m bs2 o2 o1 Eqo) in HL.
+      apply s_equiv_symm in Eqbs.
+      apply (rewrite_branches v i m bs2 [] o1 Eqbs) in HL. auto.
+    * apply (rewrite_branches v i m (p::bs1) bs2 o1 Eqbs) in HL.
+      eapply rewrite_other; eauto.
+    * apply (rewrite_branches v i m bs2 (p::bs1) o1). apply s_equiv_symm. auto.
+      eapply rewrite_other. apply s_equiv_symm. eauto. auto.
 Qed.
 
 (* A property of branches being sorted by constructors *)
@@ -218,6 +235,62 @@ Proof.
         }
 Qed.          
 
+(* Inserting preserves equivalence *)
+Lemma insert_equiv (m : M) (cst : name) (s o : S) (bs : branches) (Hsort : sorted_branches bs) :
+  Switch m ((cst, s) :: bs) o ~~ Switch m (insert cst s bs) o.
+Proof.
+  induction bs; simpl.
+  * apply s_equiv_refl.
+  * destruct a. destruct (cst <? n) eqn:Dlt.
+    + apply s_equiv_refl.
+    + destruct (cst =? n) eqn:Deq.
+      - apply (beq_nat_true cst n) in Deq. subst n.
+        intros v i. split; intro H; inversion_clear H.        
+        { eapply eHead; eauto. }
+        { eapply eTail; eauto. inversion_clear H0.
+          { unfold not in EH.
+            exfalso.
+            apply (eval_m_deterministic v w m MH w0) in MH0.
+            subst w0.
+            auto. }
+          { assumption. }          
+        }
+        { eapply eHead; eauto. }
+        { eapply eTail; eauto. eapply eTail; eauto. }        
+      - apply (beq_nat_false cst n) in Deq.
+        intros v i. split; intro H; inversion_clear H.
+        { eapply eTail.
+          { eauto. }
+          { unfold not in *. rewrite EH. auto. }
+          { inversion_clear Hsort. specialize (IHbs Hbs v i). inversion_clear IHbs.
+            apply H. eapply eHead; eauto.
+          }          
+        }
+        { inversion_clear H0.
+          { eapply eHead; eauto. }
+          { eapply eTail; eauto.
+            inversion_clear Hsort. specialize (IHbs Hbs v i). inversion_clear IHbs.
+            apply H0. eapply eTail; eauto.
+              apply (eval_m_deterministic v w m MH w0) in MH0. subst w0. auto.
+          }
+        }
+        { eapply eTail.
+          { eauto. }
+          { unfold not in *. rewrite EH. intro H. symmetry in H. auto. }
+          { eapply eHead; eauto. }
+        }
+        { 
+          inversion_clear Hsort. specialize (IHbs Hbs v i). inversion_clear IHbs.
+          apply H1 in H0. inversion_clear H0.
+          { eapply eHead; eauto. }
+          { eapply eTail; eauto.
+            { eapply eTail; eauto.
+              apply (eval_m_deterministic v w m MH w0) in MH0. subst w0. auto.
+            }
+          }
+        }
+Qed.      
+      
 (* Branch sorting *)
 Fixpoint sort_branches (bs : branches) : branches :=
   match bs with
@@ -233,6 +306,23 @@ Proof.
   { destruct a. apply insert_sorted. auto. }
 Qed.
 
+(* Branch sort preserves the semantic *)
+Lemma sort_equiv_branches (m : M) (bs : branches) (o : S) :
+  Switch m bs o ~~ Switch m (sort_branches bs) o.
+Proof.
+  induction bs; intros v i; split; intro H; simpl; auto.
+  * destruct a. apply insert_equiv.
+    + apply sort_sorts_branches. 
+    + inversion_clear H.
+      - eapply eHead; eauto. 
+      - eapply eTail; eauto. eapply rewrite_branches; eauto.
+  * simpl in H. destruct a. apply insert_equiv in H.
+    + inversion_clear H.
+      - eapply eHead; eauto.
+      - eapply eTail; eauto. eapply rewrite_branches; eauto. apply s_equiv_symm. auto.
+    + apply sort_sorts_branches.
+Qed.       
+    
 (* A property of programs to have sorted branches *)
 Inductive sorted : S -> Prop :=
   nReturn  : forall (i    : nat), sorted (Return i)
@@ -249,24 +339,16 @@ Fixpoint sort (s : S) : S :=
   | Switch m bs o => Switch m (sort_branches bs) (sort o)
   end.
 
-(* Program sort sorts properly *)
+(* Program sorting sorts properly *)
 Lemma sort_sorts (s : S) : sorted (sort s).
 Proof.
   induction s; simpl; constructor; auto; apply sort_sorts_branches.
 Qed.
 
-(*
-Lemma sorting_lemma (s : S) : exists s', s' ~~ s /\ sorted s'.
+(* Program sorting preserves equivalence *)
+Lemma sort_equiv (s : S) : s ~~ sort s.
 Proof.
-  induction s.
-  * induction bs.
-    + inversion_clear IHs. inversion_clear H. exists (Switch m [] x). split.
-      - apply s_equiv_congruence. auto. constructor.
-      - constructor. auto. constructor.
-        + inversion_clear IHs. inversion_clear IHbs. inversion_clear H. inversion_clear H0.
-          destruct a eqn:Da. inversion H. exists (Switch m (insert n s0 bs) s). split.
-          - admit.
-          - 
-  * exists (Return i). split. apply s_equiv_refl. constructor.
-Admitted.
-*)
+  induction s; simpl.
+  * apply s_equiv_congruence; auto. apply sort_equiv_branches.
+  * apply s_equiv_refl.
+Qed.

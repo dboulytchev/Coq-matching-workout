@@ -152,7 +152,7 @@ Inductive sorted_branches : branches -> Prop :=
                   (Hord : forall cst' s', In (cst', s') bs -> cst < cst'),
     sorted_branches ((cst, s) :: bs).
 
-(* Inserting in a branch sort-preserving *)
+(* Inserting in branch in a sort-preserving manner *)
 Fixpoint insert (cst : name) (s : S) (bs : branches) : branches :=
   match bs with
     []                => [(cst, s)]
@@ -170,8 +170,23 @@ Lemma in_insert
       (s s'     : S)
       (bs       : branches)
       (Hin      : In (cst', s') (insert cst s bs)) : (cst', s') = (cst, s) \/ In (cst', s') bs.
-Proof. admit. Admitted.
-
+Proof.
+  induction bs; simpl in Hin.
+  * inversion_clear Hin. left. auto. auto.
+  * destruct a. destruct (cst <? n) eqn:Dlt.
+    + inversion Hin; [left | right]; auto.
+    + destruct (cst =? n) eqn:Deq.
+      - apply (beq_nat_true cst n) in Deq. subst n. inversion_clear Hin.
+        { left. auto. }
+        { right. simpl. right. auto. }
+      - inversion_clear Hin.
+        { right. rewrite <-H. constructor. reflexivity. }
+        { specialize (IHbs H). inversion IHbs.
+          { left. auto. }
+          { right. simpl. right. auto. }
+        }
+Qed.
+  
 (* Inserting preserves sorting *)
 Lemma insert_sorted (cst : name) (s : S) (bs : branches) (Hsort : sorted_branches bs) :
   sorted_branches (insert cst s bs).
@@ -203,6 +218,21 @@ Proof.
         }
 Qed.          
 
+(* Branch sorting *)
+Fixpoint sort_branches (bs : branches) : branches :=
+  match bs with
+    []             => []
+  | (cst, s) :: bs => insert cst s (sort_branches bs)
+  end.
+
+(* Branch sort sorts property *)
+Lemma sort_sorts_branches (bs : branches) : sorted_branches (sort_branches bs).
+Proof.
+  induction bs; simpl.
+  { constructor. }
+  { destruct a. apply insert_sorted. auto. }
+Qed.
+
 (* A property of programs to have sorted branches *)
 Inductive sorted : S -> Prop :=
   nReturn  : forall (i    : nat), sorted (Return i)
@@ -212,6 +242,20 @@ Inductive sorted : S -> Prop :=
                     (Hso  : sorted o)                                        
                     (Hord : sorted_branches bs), sorted (Switch m bs o).
 
+(* Sorting programs *)
+Fixpoint sort (s : S) : S :=
+  match s with
+    Return i      => Return i
+  | Switch m bs o => Switch m (sort_branches bs) (sort o)
+  end.
+
+(* Program sort sorts properly *)
+Lemma sort_sorts (s : S) : sorted (sort s).
+Proof.
+  induction s; simpl; constructor; auto; apply sort_sorts_branches.
+Qed.
+
+(*
 Lemma sorting_lemma (s : S) : exists s', s' ~~ s /\ sorted s'.
 Proof.
   induction s.
@@ -225,3 +269,4 @@ Proof.
           - 
   * exists (Return i). split. apply s_equiv_refl. constructor.
 Admitted.
+*)
